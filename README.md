@@ -46,3 +46,41 @@ tail -f ~/Library/Logs/fileserver.err
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.fsc.fileserver.plist
 ```
+
+## Run at login (Linux systemd)
+
+**Install:**
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/fileserver.service <<EOF
+[Unit]
+Description=Research file browser
+
+[Service]
+WorkingDirectory=/path/to/fileserver
+ExecStart=/path/to/uvicorn fileserver:app --host 0.0.0.0 --port 8080
+Restart=always
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now fileserver.service
+```
+
+Replace `/path/to/fileserver` and `/path/to/uvicorn` with the actual paths (`pwd` and `which uvicorn`).
+
+**Check status / logs:**
+
+```bash
+systemctl --user status fileserver
+journalctl --user -u fileserver -f
+```
+
+**Stop / uninstall:**
+
+```bash
+systemctl --user disable --now fileserver.service
+```
