@@ -1,0 +1,5 @@
+fastapi==0.128.8
+uvicorn==0.39.0
+Markdown==3.3.4
+numpy==2.0.2
+pyvista==0.44.2
