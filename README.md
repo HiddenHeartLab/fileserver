@@ -4,11 +4,19 @@ Read-only research file browser for `/Users/fsc/Documents/repos`.
 
 Renders Markdown + LaTeX, syntax-highlighted code, images, Jupyter notebooks, and VTK/VTP/VTU meshes via Three.js.
 
+## Configuration
+
+The directory served is controlled by the `FILESERVER_ROOT` environment variable. If unset, it defaults to the user's home directory.
+
+```bash
+export FILESERVER_ROOT=/path/to/serve
+```
+
 ## Run manually
 
 ```bash
-cd /Users/fsc/Documents/repos/fileserver
-uvicorn fileserver:app --host 0.0.0.0 --port 8080
+cd /path/to/fileserver
+FILESERVER_ROOT=/path/to/serve uvicorn fileserver:app --host 0.0.0.0 --port 8080
 ```
 
 Then open http://localhost:8080.
@@ -58,6 +66,7 @@ cat > ~/.config/systemd/user/fileserver.service <<EOF
 Description=Research file browser
 
 [Service]
+Environment=FILESERVER_ROOT=/path/to/serve
 WorkingDirectory=/path/to/fileserver
 ExecStart=/path/to/uvicorn fileserver:app --host 0.0.0.0 --port 8080
 Restart=always

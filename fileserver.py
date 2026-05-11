@@ -10,6 +10,7 @@ Usage:
 
 import base64
 import json
+import os
 import re
 import html as html_lib
 from pathlib import Path
@@ -22,7 +23,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 
 pv.set_error_output_file("/dev/null")   # suppress pyvista stderr noise
 
-ROOT = Path("/Users/fsc/Documents/repos")
+ROOT = Path(os.environ.get("FILESERVER_ROOT", Path.home())).resolve()
 app = FastAPI()
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp", ".tiff", ".tif"}
@@ -71,6 +72,13 @@ def breadcrumbs(rel: str) -> str:
     return " / ".join(crumbs)
 
 
+def file_nav(rel: str) -> str:
+    return (
+        f'<nav>{breadcrumbs(rel)}'
+        f'<a class="dl-link" href="/download/{rel}">⬇ Download</a></nav>'
+    )
+
+
 def file_icon(p: Path) -> str:
     if p.is_dir():
         return "📁"
@@ -99,9 +107,15 @@ nav a:hover { text-decoration: underline; }
        border-radius: 8px; overflow: hidden; }
 .dir li { border-bottom: 1px solid #f0f0f0; }
 .dir li:last-child { border-bottom: none; }
-.dir a { display: flex; align-items: center; gap: .6rem; padding: .52rem 1rem;
-         color: #0057d8; text-decoration: none; font-size: .92rem; }
-.dir a:hover { background: #f0f5ff; }
+.dir li { display: flex; align-items: stretch; }
+.dir .row-name { flex: 1; display: flex; align-items: center; gap: .6rem;
+                 padding: .52rem 1rem; color: #0057d8; text-decoration: none; font-size: .92rem; }
+.dir .row-name:hover { background: #f0f5ff; }
+.dir .row-dl { display: flex; align-items: center; padding: .52rem 1rem;
+               color: #888; text-decoration: none; font-size: 1rem; }
+.dir .row-dl:hover { color: #0057d8; background: #f0f5ff; }
+.dl-link { margin-left: 1rem; color: #0057d8; text-decoration: none; }
+.dl-link:hover { text-decoration: underline; }
 .icon { width: 1.2rem; text-align: center; }
 .panel { background: #fff; border: 1px solid #e2e2e2; border-radius: 8px; padding: 2rem; }
 .md h1, .md h2, .md h3, .md h4 { margin: 1.6rem 0 .5rem; line-height: 1.3; }
@@ -367,7 +381,7 @@ def _vtk_page(name: str, rel: str) -> str:
 {_VTK_CSS}
 </head>
 <body>
-<div id="topbar"><nav>{nav}</nav><span id="info" style="margin-left:auto"></span></div>
+<div id="topbar"><nav>{nav}</nav><a href="/download/{rel}">⬇ Download</a><span id="info" style="margin-left:auto"></span></div>
 <div id="viewport"></div>
 <div id="panel">
   <label>Color by
@@ -450,6 +464,14 @@ async def raw(rel: str):
     return FileResponse(path)
 
 
+@app.get("/download/{rel:path}")
+async def download(rel: str):
+    path = safe_path(rel)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, filename=path.name)
+
+
 @app.get("/vtk-json/{rel:path}")
 async def vtk_json(rel: str):
     path = safe_path(rel)
@@ -472,11 +494,20 @@ def _render_dir(path: Path, rel: str) -> HTMLResponse:
             continue
         icon   = file_icon(e)
         suffix = "/" if e.is_dir() else ""
-        href   = ("/browse/" + rel + "/" + e.name).replace("//", "/")
-        rows.append(
-            f'<li><a href="{href}"><span class="icon">{icon}</span>'
-            f"{html_lib.escape(e.name)}{suffix}</a></li>"
+        view_href = ("/browse/" + rel + "/" + e.name).replace("//", "/")
+        name_link = (
+            f'<a class="row-name" href="{view_href}">'
+            f'<span class="icon">{icon}</span>'
+            f'{html_lib.escape(e.name)}{suffix}</a>'
         )
+        if e.is_dir():
+            rows.append(f'<li>{name_link}</li>')
+        else:
+            dl_href = ("/download/" + rel + "/" + e.name).replace("//", "/")
+            rows.append(
+                f'<li>{name_link}'
+                f'<a class="row-dl" href="{dl_href}" title="Download">⬇</a></li>'
+            )
     body = (
         f'<nav>{breadcrumbs(rel)}</nav>'
         f'<ul class="dir">{"".join(rows) or "<li><a>(empty)</a></li>"}</ul>'
@@ -492,7 +523,7 @@ def _render_file(path: Path, rel: str) -> HTMLResponse:
 
     if ext in IMAGE_EXTS:
         body = (
-            f'<nav>{breadcrumbs(rel)}</nav>'
+            f'{file_nav(rel)}'
             f'<div class="panel img-panel">'
             f'<img src="/raw/{rel}" alt="{html_lib.escape(path.name)}"></div>'
         )
@@ -514,7 +545,7 @@ def _render_file(path: Path, rel: str) -> HTMLResponse:
             raise HTTPException(500)
         lang = ext.lstrip(".") or "plaintext"
         body = (
-            f'<nav>{breadcrumbs(rel)}</nav>'
+            f'{file_nav(rel)}'
             f'<div class="panel code"><pre>'
             f'<code class="language-{lang}">{html_lib.escape(content)}</code>'
             f'</pre></div>'
@@ -532,7 +563,7 @@ def _render_markdown(path: Path, rel: str) -> HTMLResponse:
         raise HTTPException(500)
     rendered = _md_to_html(content)
     body = (
-        f'<nav>{breadcrumbs(rel)}</nav>'
+        f'{file_nav(rel)}'
         f'<div class="panel"><div class="md" id="md">{rendered}</div></div>'
         f"<script>applyMathAndHighlight(document.getElementById('md'));</script>"
     )
@@ -590,7 +621,7 @@ def _render_notebook(path: Path, rel: str) -> HTMLResponse:
             )
 
     body = (
-        f'<nav>{breadcrumbs(rel)}</nav>'
+        f'{file_nav(rel)}'
         f'<div class="panel" id="nb">{"".join(cells_html)}</div>'
         f"<script>applyMathAndHighlight(document.getElementById('nb'));</script>"
     )

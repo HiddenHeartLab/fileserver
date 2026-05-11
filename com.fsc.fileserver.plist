@@ -15,6 +15,11 @@
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/fsc/Documents/repos/fileserver</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>FILESERVER_ROOT</key>
+        <string>/Users/fsc/Documents/repos</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
